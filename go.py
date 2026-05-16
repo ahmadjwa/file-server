@@ -39,11 +39,8 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# =========================
-# FIX: use Argon2 (NO 72-byte limit)
-# =========================
 pwd_context = CryptContext(
-    schemes=["argon2"],
+    schemes=["pbkdf2_sha256"],
     deprecated="auto"
 )
 
@@ -76,47 +73,114 @@ def get_user(sid):
     return sessions.get(sid)
 
 # =========================
-# HOME
+# HOME PAGE
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = ""):
 
-    error_html = f"<div style='color:red'>{error}</div>" if error else ""
+    error_html = f"<div style='color:#f87171;margin-bottom:10px'>{error}</div>" if error else ""
 
     return f"""
     <html>
-    <body style="background:#0f172a;color:white;text-align:center;font-family:Arial">
+    <head>
+        <title>Cloud Drive</title>
+        <style>
+            body {{
+                margin:0;
+                font-family:Arial;
+                background: linear-gradient(135deg,#0f172a,#1e293b);
+                color:white;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                height:100vh;
+            }}
 
-        <h2>Cloud Drive</h2>
-        {error_html}
+            .box {{
+                background:#111827;
+                padding:30px;
+                border-radius:15px;
+                width:350px;
+                box-shadow:0 10px 40px rgba(0,0,0,0.5);
+            }}
 
-        <h3>Login</h3>
-        <form action="/login" method="post">
-            <input name="username" placeholder="Username"><br>
-            <input type="password" name="password" placeholder="Password"><br>
-            <button>Login</button>
-        </form>
+            h2 {{
+                text-align:center;
+                color:#60a5fa;
+            }}
 
-        <h3>Register</h3>
-        <form action="/register" method="post">
-            <input name="username" placeholder="Username"><br>
-            <input type="password" name="password" placeholder="Password"><br>
-            <button>Create Account</button>
-        </form>
+            input {{
+                width:100%;
+                padding:10px;
+                margin:6px 0;
+                border:none;
+                border-radius:8px;
+                background:#1f2937;
+                color:white;
+            }}
+
+            button {{
+                width:100%;
+                padding:10px;
+                margin-top:10px;
+                border:none;
+                border-radius:8px;
+                background:#3b82f6;
+                color:white;
+                cursor:pointer;
+            }}
+
+            button:hover {{
+                background:#2563eb;
+            }}
+
+            hr {{
+                border:0;
+                height:1px;
+                background:#374151;
+                margin:15px 0;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <div class="box">
+
+            <h2>☁ Cloud Drive</h2>
+            {error_html}
+
+            <form action="/login" method="post">
+                <h3>Login</h3>
+                <input name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button>Login</button>
+            </form>
+
+            <hr>
+
+            <form action="/register" method="post">
+                <h3>Register</h3>
+                <input name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button>Create Account</button>
+            </form>
+
+        </div>
 
     </body>
     </html>
     """
 
 # =========================
-# REGISTER (FIXED)
+# REGISTER
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
     try:
-        password = password.strip()  # مهم: إزالة أي محارف مخفية
+        password = password.strip()
 
         existing = db.query(User).filter(User.username == username).first()
 
@@ -134,8 +198,7 @@ def register(username: str = Form(...), password: str = Form(...)):
 
     except Exception as e:
         db.rollback()
-        print("REGISTER ERROR:", str(e))
-        return HTMLResponse(f"<h1>ERROR:</h1><pre>{e}</pre>")
+        return HTMLResponse(f"<h1>Error</h1><pre>{e}</pre>")
 
     finally:
         db.close()
@@ -166,7 +229,7 @@ def login(username: str = Form(...), password: str = Form(...)):
         db.close()
 
 # =========================
-# DASHBOARD
+# DASHBOARD (MODERN UI)
 # =========================
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(sid: str):
@@ -182,29 +245,151 @@ def dashboard(sid: str):
     files = os.listdir(user_dir)
 
     cards = ""
+
     for f in files:
         cards += f"""
-        <div>
-            📄 {f}<br>
-            <a href="/download/{user}/{f}">Download</a><br>
-            <a href="/delete/{user}/{f}?sid={sid}">Delete</a>
-        </div><br>
+        <div class="card">
+            <div class="file">📄 {f}</div>
+
+            <div class="actions">
+                <a class="btn download" href="/download/{user}/{f}">Download</a>
+                <a class="btn delete" href="/delete/{user}/{f}?sid={sid}">Delete</a>
+            </div>
+        </div>
         """
 
     return f"""
     <html>
-    <body style="background:#0f172a;color:white;text-align:center">
+    <head>
+        <title>Dashboard</title>
+        <style>
 
-        <h2>Welcome {user}</h2>
+            body {{
+                margin:0;
+                font-family:Arial;
+                background:#0b1220;
+                color:white;
+            }}
 
-        <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
-            <input type="file" name="file">
-            <button>Upload</button>
-        </form>
+            .navbar {{
+                background:#111827;
+                padding:15px 25px;
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                box-shadow:0 5px 20px rgba(0,0,0,0.4);
+            }}
 
-        <hr>
+            .navbar h2 {{
+                color:#60a5fa;
+                margin:0;
+            }}
 
-        {cards if cards else "No files"}
+            .container {{
+                max-width:1000px;
+                margin:auto;
+                padding:25px;
+            }}
+
+            .upload-box {{
+                background:#111827;
+                padding:15px;
+                border-radius:12px;
+                margin-bottom:20px;
+            }}
+
+            input[type=file] {{
+                color:white;
+            }}
+
+            button {{
+                padding:10px 15px;
+                border:none;
+                border-radius:8px;
+                background:#3b82f6;
+                color:white;
+                cursor:pointer;
+            }}
+
+            .grid {{
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                gap:15px;
+            }}
+
+            .card {{
+                background:#111827;
+                padding:15px;
+                border-radius:12px;
+                border:1px solid #1f2937;
+                transition:0.3s;
+            }}
+
+            .card:hover {{
+                transform:translateY(-5px);
+                border-color:#3b82f6;
+            }}
+
+            .file {{
+                margin-bottom:10px;
+                word-break:break-word;
+                color:#e5e7eb;
+            }}
+
+            .actions {{
+                display:flex;
+                gap:8px;
+            }}
+
+            .btn {{
+                flex:1;
+                text-align:center;
+                padding:8px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:13px;
+            }}
+
+            .download {{
+                background:#22c55e;
+                color:white;
+            }}
+
+            .delete {{
+                background:#ef4444;
+                color:white;
+            }}
+
+            .empty {{
+                text-align:center;
+                color:#94a3b8;
+                margin-top:30px;
+            }}
+
+        </style>
+    </head>
+
+    <body>
+
+        <div class="navbar">
+            <h2>☁ Cloud Drive</h2>
+            <div>👤 {user}</div>
+        </div>
+
+        <div class="container">
+
+            <div class="upload-box">
+                <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file" required>
+                    <button>Upload</button>
+                </form>
+            </div>
+
+            <div class="grid">
+                {cards if cards else "<div class='empty'>No files uploaded yet</div>"}
+            </div>
+
+        </div>
 
     </body>
     </html>
