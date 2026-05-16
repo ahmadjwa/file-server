@@ -1,8 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from passlib.context import CryptContext
 import os
 import shutil
@@ -11,201 +10,156 @@ import random
 app = FastAPI()
 
 # =========================
-# قاعدة البيانات
+# DATABASE (FIXED)
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# fallback حتى لا يحدث crash
 if not DATABASE_URL:
-    raise Exception("DATABASE_URL is not set in environment variables")
+    DATABASE_URL = "sqlite:///./test.db"
 
-if DATABASE_URL.startswith("postgresql://"):
+connect_args = {}
+
+# دعم SQLite
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+# دعم PostgreSQL
+elif DATABASE_URL.startswith("postgresql"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgresql://",
         "postgresql+psycopg2://",
         1
     )
+    connect_args = {"sslmode": "require"}
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    connect_args={"sslmode": "require"}
-)
-SessionLocal = sessionmaker(bind=engine)
-Base = declarative_base()
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
+    connect_args=connect_args
 )
 
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 # =========================
-# جدول المستخدمين
+# USER TABLE
 # =========================
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
     password = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
 # =========================
-# الملفات
+# FILES
 # =========================
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 sessions = {}
 
-# =========================
-# جلسات
-# =========================
 def create_session(user):
     sid = str(random.randint(100000, 999999))
     sessions[sid] = user
     return sid
 
-
 def get_user(sid):
     return sessions.get(sid)
 
 # =========================
-# الصفحة الرئيسية
+# HOME PAGE
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = ""):
 
-    error_html = ""
-    if error:
-        error_html = f"<div style='color:red;margin-bottom:10px'>{error}</div>"
+    error_html = f"<div style='color:red'>{error}</div>" if error else ""
 
     return f"""
     <html>
-    <head>
-        <title>Cloud Drive</title>
-        <style>
-            body {{
-                margin:0;
-                font-family:Arial;
-                background:#0f172a;
-                color:white;
-                display:flex;
-                justify-content:center;
-                align-items:center;
-                height:100vh;
-            }}
+    <body style="background:#0f172a;color:white;text-align:center;font-family:Arial">
 
-            .box {{
-                background:#1e293b;
-                padding:30px;
-                border-radius:12px;
-                width:350px;
-                box-shadow:0 10px 30px rgba(0,0,0,0.4);
-            }}
+        <h2>Cloud Drive</h2>
+        {error_html}
 
-            input {{
-                width:100%;
-                padding:10px;
-                margin:5px 0;
-                border:none;
-                border-radius:6px;
-            }}
+        <h3>Login</h3>
+        <form action="/login" method="post">
+            <input name="username" placeholder="Username"><br>
+            <input type="password" name="password" placeholder="Password"><br>
+            <button>Login</button>
+        </form>
 
-            button {{
-                width:100%;
-                padding:10px;
-                background:#3b82f6;
-                color:white;
-                border:none;
-                border-radius:6px;
-                margin-top:10px;
-                cursor:pointer;
-            }}
-
-            button:hover {{
-                background:#2563eb;
-            }}
-
-            hr {{ opacity:0.3; }}
-        </style>
-    </head>
-
-    <body>
-
-        <div class="box">
-
-            <h2>☁ Cloud Drive</h2>
-
-            {error_html}
-
-            <h3>Login</h3>
-            <form action="/login" method="post">
-                <input name="username" placeholder="Username" required>
-                <input type="password" name="password" placeholder="Password" required>
-                <button>Login</button>
-            </form>
-
-            <hr>
-
-            <h3>Register</h3>
-            <form action="/register" method="post">
-                <input name="username" placeholder="Username" required>
-                <input type="password" name="password" placeholder="Password" required>
-                <button>Create Account</button>
-            </form>
-
-        </div>
+        <h3>Register</h3>
+        <form action="/register" method="post">
+            <input name="username" placeholder="Username"><br>
+            <input type="password" name="password" placeholder="Password"><br>
+            <button>Create Account</button>
+        </form>
 
     </body>
     </html>
     """
 
 # =========================
-# Register
+# REGISTER (FIXED)
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.username == username).first()
 
-    existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            return RedirectResponse(url="/?error=Username already exists", status_code=302)
 
-    if existing:
-        return RedirectResponse(url='/?error=Username already exists', status_code=302)
+        hashed = pwd_context.hash(password)
 
-    hashed_password = pwd_context.hash(password)
+        user = User(username=username, password=hashed)
 
-    user = User(
-        username=username,
-        password=hashed_password
-    )
+        db.add(user)
+        db.commit()
 
-    db.add(user)
-    db.commit()
+        return RedirectResponse(url="/?error=Account created successfully", status_code=302)
 
-    return RedirectResponse(url='/?error=Account created successfully', status_code=302)
+    except Exception as e:
+        db.rollback()
+        print("REGISTER ERROR:", e)
+        return RedirectResponse(url="/?error=Server error", status_code=302)
+
+    finally:
+        db.close()
 
 # =========================
-# Login
+# LOGIN
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
 
-    user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return RedirectResponse(url="/?error=User not found", status_code=302)
 
-    if not user:
-        return RedirectResponse(url='/?error=User not found', status_code=302)
+        if not pwd_context.verify(password, user.password):
+            return RedirectResponse(url="/?error=Wrong password", status_code=302)
 
-    if not pwd_context.verify(password, user.password):
-        return RedirectResponse(url='/?error=Wrong password', status_code=302)
+        sid = create_session(username)
 
-    sid = create_session(username)
+        return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
 
-    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
+    finally:
+        db.close()
 
 # =========================
-# Dashboard
+# DASHBOARD
 # =========================
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(sid: str):
@@ -213,7 +167,7 @@ def dashboard(sid: str):
     user = get_user(sid)
 
     if not user:
-        return RedirectResponse(url='/')
+        return RedirectResponse(url="/")
 
     user_dir = os.path.join(UPLOAD_DIR, user)
     os.makedirs(user_dir, exist_ok=True)
@@ -221,109 +175,36 @@ def dashboard(sid: str):
     files = os.listdir(user_dir)
 
     cards = ""
-
     for f in files:
         cards += f"""
-        <div class='card'>
-            <div>📄 {f}</div>
-
-            <a href='/download/{user}/{f}'>
-                <button class='download'>⬇ Download</button>
-            </a>
-
-            <a href='/delete/{user}/{f}?sid={sid}'>
-                <button class='delete'>🗑 Delete</button>
-            </a>
-        </div>
+        <div>
+            📄 {f}<br>
+            <a href="/download/{user}/{f}">Download</a><br>
+            <a href="/delete/{user}/{f}?sid={sid}">Delete</a>
+        </div><br>
         """
 
     return f"""
     <html>
-    <head>
-        <style>
-            body {{
-                margin:0;
-                font-family:Arial;
-                background:#0f172a;
-                color:white;
-            }}
+    <body style="background:#0f172a;color:white;text-align:center">
 
-            .top {{
-                background:#111827;
-                padding:20px;
-                text-align:center;
-                font-size:20px;
-            }}
+        <h2>Welcome {user}</h2>
 
-            .container {{
-                padding:20px;
-                text-align:center;
-            }}
+        <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
+            <input type="file" name="file">
+            <button>Upload</button>
+        </form>
 
-            .upload {{
-                background:#1e293b;
-                padding:20px;
-                border-radius:12px;
-                width:300px;
-                margin:auto;
-            }}
+        <hr>
 
-            .grid {{
-                display:flex;
-                flex-wrap:wrap;
-                justify-content:center;
-                margin-top:20px;
-            }}
-
-            .card {{
-                background:#1e293b;
-                width:220px;
-                margin:10px;
-                padding:15px;
-                border-radius:10px;
-            }}
-
-            button {{
-                width:100%;
-                padding:10px;
-                margin-top:8px;
-                border:none;
-                border-radius:6px;
-                color:white;
-                cursor:pointer;
-            }}
-
-            .download {{ background:#22c55e; }}
-            .delete {{ background:#ef4444; }}
-            .uploadbtn {{ background:#3b82f6; }}
-        </style>
-    </head>
-
-    <body>
-
-        <div class='top'>👤 {user}</div>
-
-        <div class='container'>
-
-            <div class='upload'>
-                <form action='/upload?sid={sid}' method='post' enctype='multipart/form-data'>
-                    <input type='file' name='file' required>
-                    <button class='uploadbtn'>⬆ Upload</button>
-                </form>
-            </div>
-
-            <div class='grid'>
-                {cards if cards else '<p>No files yet</p>'}
-            </div>
-
-        </div>
+        {cards if cards else "No files"}
 
     </body>
     </html>
     """
 
 # =========================
-# Upload
+# UPLOAD
 # =========================
 @app.post("/upload")
 def upload(sid: str, file: UploadFile = File(...)):
@@ -331,7 +212,7 @@ def upload(sid: str, file: UploadFile = File(...)):
     user = get_user(sid)
 
     if not user:
-        return RedirectResponse(url='/')
+        return RedirectResponse(url="/")
 
     user_dir = os.path.join(UPLOAD_DIR, user)
     os.makedirs(user_dir, exist_ok=True)
@@ -341,10 +222,10 @@ def upload(sid: str, file: UploadFile = File(...)):
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
+    return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
 
 # =========================
-# Download
+# DOWNLOAD
 # =========================
 @app.get("/download/{user}/{filename}")
 def download(user: str, filename: str):
@@ -357,7 +238,7 @@ def download(user: str, filename: str):
     return {"error": "not found"}
 
 # =========================
-# Delete
+# DELETE
 # =========================
 @app.get("/delete/{user}/{filename}")
 def delete(user: str, filename: str, sid: str):
@@ -367,4 +248,4 @@ def delete(user: str, filename: str, sid: str):
     if os.path.exists(path):
         os.remove(path)
 
-    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
+    return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
