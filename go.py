@@ -129,8 +129,8 @@ def register(username: str = Form(...), password: str = Form(...)):
 
     except Exception as e:
         db.rollback()
-        print("REGISTER ERROR:", e)
-        return RedirectResponse(url="/?error=Server error", status_code=302)
+        print("REGISTER ERROR:", str(e))
+        return HTMLResponse(f"<h1>ERROR:</h1><pre>{e}</pre>")
 
     finally:
         db.close()
