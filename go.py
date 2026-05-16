@@ -15,6 +15,9 @@ app = FastAPI()
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL is not set in environment variables")
+
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgresql://",
