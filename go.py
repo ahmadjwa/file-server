@@ -169,7 +169,7 @@ def register(username: str = Form(...), password: str = Form(...)):
     if existing:
         return RedirectResponse(url='/?error=Username already exists', status_code=302)
 
-    hashed_password = bcrypt.hash(password)
+    hashed_password = pwd_context.hash(password)
 
     user = User(
         username=username,
@@ -194,7 +194,7 @@ def login(username: str = Form(...), password: str = Form(...)):
     if not user:
         return RedirectResponse(url='/?error=User not found', status_code=302)
 
-    if not bcrypt.verify(password, user.password):
+    if not pwd_context.verify(password, user.password):
         return RedirectResponse(url='/?error=Wrong password', status_code=302)
 
     sid = create_session(username)
