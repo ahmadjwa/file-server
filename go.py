@@ -12,7 +12,7 @@ import cloudinary.uploader
 app = FastAPI()
 
 # =========================
-# CLOUDINARY CONFIG
+# CLOUDINARY
 # =========================
 cloudinary.config(
     cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
@@ -21,12 +21,14 @@ cloudinary.config(
 )
 
 # =========================
-# DATABASE (FIXED FOR RENDER)
+# DATABASE FIX (IMPORTANT)
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# مهم جدًا لـ Render PostgreSQL
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+if not DATABASE_URL:
+    raise Exception("DATABASE_URL is not set in Render environment variables")
+
+if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgres://",
         "postgresql+psycopg2://",
@@ -35,7 +37,7 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 
 connect_args = {}
 
-if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
+if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
@@ -48,7 +50,7 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 # =========================
-# PASSWORD SECURITY
+# SECURITY
 # =========================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -72,10 +74,15 @@ class File(Base):
     url = Column(String)
     public_id = Column(String)
 
-Base.metadata.create_all(bind=engine)
+# =========================
+# CREATE TABLES SAFELY
+# =========================
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 # =========================
-# SESSIONS (TEMP MEMORY)
+# SESSIONS
 # =========================
 sessions = {}
 
@@ -91,13 +98,12 @@ def delete_session(sid):
     sessions.pop(sid, None)
 
 # =========================
-# HOME PAGE
+# HOME
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = "", success: str = ""):
 
     msg = ""
-
     if error:
         msg = f"<p style='color:red'>{error}</p>"
     elif success:
@@ -108,7 +114,6 @@ def home(error: str = "", success: str = ""):
     <body style="font-family:Arial;background:#111;color:white;text-align:center;padding:50px">
 
         <h1>🚀 Super Uploader</h1>
-
         {msg}
 
         <form action="/login" method="post">
@@ -156,7 +161,7 @@ def register(username: str = Form(...), password: str = Form(...)):
         db.close()
 
 # =========================
-# LOGIN (FIXED SECURITY CHECK)
+# LOGIN
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
@@ -168,7 +173,6 @@ def login(username: str = Form(...), password: str = Form(...)):
         if not user:
             return RedirectResponse("/?error=User not found", status_code=302)
 
-        # FIX: safe password verify
         if not pwd_context.verify(password, user.password):
             return RedirectResponse("/?error=Wrong password", status_code=302)
 
@@ -186,7 +190,6 @@ def login(username: str = Form(...), password: str = Form(...)):
 def dashboard(sid: str):
 
     user = get_user(sid)
-
     if not user:
         return RedirectResponse("/")
 
@@ -197,7 +200,6 @@ def dashboard(sid: str):
         db.close()
 
     cards = ""
-
     for f in files:
         cards += f"""
         <div style="border:1px solid #444;padding:10px;margin:10px">
@@ -230,13 +232,12 @@ def dashboard(sid: str):
     """
 
 # =========================
-# UPLOAD (CLOUDINARY + DB)
+# UPLOAD
 # =========================
 @app.post("/upload")
 def upload(sid: str, file: UploadFile = FastAPIFile(...)):
 
     user = get_user(sid)
-
     if not user:
         return RedirectResponse("/")
 
