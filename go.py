@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File as FastAPIFile, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -200,7 +200,7 @@ def dashboard(sid: str):
 # UPLOAD TO CLOUDINARY
 # =========================
 @app.post("/upload")
-def upload(sid: str, file: UploadFile = File(...)):
+def upload(sid: str, file: UploadFile = FastAPIFile(...)):
 
     user = get_user(sid)
     if not user:
