@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse
 import os
 import shutil
 import random
@@ -12,9 +12,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 users = {}
 sessions = {}
 
-# =========================
-# جلسة بسيطة
-# =========================
 def create_session(user):
     sid = str(random.randint(100000, 999999))
     sessions[sid] = user
@@ -24,93 +21,73 @@ def get_user(sid):
     return sessions.get(sid)
 
 # =========================
-# الصفحة الرئيسية (تصميم احترافي)
+# صفحة الدخول مع رسائل
 # =========================
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return """
+def home(msg: str = "", error: str = ""):
+
+    msg_html = ""
+    if msg:
+        msg_html = f"<div style='color:green;margin-bottom:10px;'>✅ {msg}</div>"
+    if error:
+        msg_html = f"<div style='color:red;margin-bottom:10px;'>❌ {error}</div>"
+
+    return f"""
     <html>
     <head>
-    <title>Cloud Drive</title>
     <style>
-        body {
-            margin:0;
+        body {{
             font-family: Arial;
-            background: linear-gradient(120deg,#0f172a,#1e293b);
-            color:white;
+            background: #0f172a;
             display:flex;
             justify-content:center;
             align-items:center;
             height:100vh;
-        }
-
-        .box {
-            background: rgba(255,255,255,0.08);
-            padding:30px;
-            border-radius:15px;
-            width:350px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-        }
-
-        input {
-            width:100%;
-            padding:12px;
-            margin:8px 0;
-            border:none;
-            border-radius:8px;
-            outline:none;
-        }
-
-        button {
-            width:100%;
-            padding:12px;
-            margin-top:10px;
-            border:none;
-            border-radius:8px;
-            background:#3b82f6;
             color:white;
+        }}
+        .box {{
+            background:#1e293b;
+            padding:25px;
+            border-radius:12px;
+            width:320px;
+            text-align:center;
+        }}
+        input {{
+            width:100%;
+            padding:10px;
+            margin:5px 0;
+        }}
+        button {{
+            width:100%;
+            padding:10px;
+            background:#3b82f6;
+            border:none;
+            color:white;
+            margin-top:10px;
             cursor:pointer;
-            font-weight:bold;
-        }
-
-        button:hover {
-            background:#2563eb;
-        }
-
-        h2,h3 {
-            text-align:center;
-        }
-
-        .divider {
-            text-align:center;
-            margin:10px 0;
-            opacity:0.6;
-        }
+        }}
     </style>
     </head>
 
     <body>
         <div class="box">
+            <h2>🔐 Login System</h2>
 
-            <h2>☁ Cloud Drive</h2>
+            {msg_html}
 
-            <h3>Login</h3>
             <form action="/login" method="post">
                 <input name="username" placeholder="Username" required>
                 <input name="password" type="password" placeholder="Password" required>
-                <button type="submit">Login</button>
+                <button>Login</button>
             </form>
 
-            <div class="divider">OR</div>
+            <hr>
 
-            <h3>Register</h3>
             <form action="/register" method="post">
                 <input name="username" placeholder="Username" required>
                 <input name="password" type="password" placeholder="Password" required>
-                <button type="submit">Create Account</button>
+                <button>Register</button>
             </form>
-
         </div>
     </body>
     </html>
@@ -122,18 +99,33 @@ def home():
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
     users[username] = password
-    return RedirectResponse("/", status_code=302)
+    return HTMLResponse("""
+        <script>
+            window.location.href='/?msg=Account created successfully';
+        </script>
+    """)
 
 # =========================
-# دخول
+# دخول (مع رسالة خطأ أو نجاح)
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
+
     if users.get(username) != password:
-        return {"error": "wrong password"}
+        return HTMLResponse("""
+            <script>
+                window.location.href='/?error=Wrong username or password';
+            </script>
+        """)
 
     sid = create_session(username)
-    return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
+
+    return HTMLResponse(f"""
+        <script>
+            alert('Login successful ✔');
+            window.location.href='/dashboard?sid={sid}';
+        </script>
+    """)
 
 # =========================
 # لوحة المستخدم
@@ -152,84 +144,20 @@ def dashboard(sid: str):
     file_html = ""
     for f in files:
         file_html += f"""
-        <div style='padding:8px;background:#1e293b;margin:5px;border-radius:8px;'>
-            📄 {f}
-            <a href="/download/{user}/{f}" style="color:#38bdf8;">⬇</a>
-        </div>
+        <div>📄 {f} - <a href="/download/{user}/{f}">⬇</a></div>
         """
 
     return f"""
-    <html>
-    <head>
-    <style>
-        body {{
-            margin:0;
-            font-family: Arial;
-            background:#0f172a;
-            color:white;
-        }}
+    <h2>👤 Welcome {user}</h2>
 
-        .top {{
-            background:#111827;
-            padding:15px;
-            text-align:center;
-            font-size:20px;
-        }}
+    <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <button>Upload</button>
+    </form>
 
-        .container {{
-            display:flex;
-            gap:20px;
-            padding:20px;
-        }}
+    <hr>
 
-        .left, .right {{
-            flex:1;
-            background:#1e293b;
-            padding:20px;
-            border-radius:12px;
-        }}
-
-        input {{
-            width:100%;
-            padding:10px;
-        }}
-
-        button {{
-            padding:10px;
-            width:100%;
-            margin-top:10px;
-            background:#3b82f6;
-            border:none;
-            color:white;
-            border-radius:8px;
-            cursor:pointer;
-        }}
-    </style>
-    </head>
-
-    <body>
-
-        <div class="top">👤 Welcome {user}</div>
-
-        <div class="container">
-
-            <div class="left">
-                <h3>⬆ Upload File</h3>
-                <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button>Upload</button>
-                </form>
-            </div>
-
-            <div class="right">
-                <h3>📁 Your Files</h3>
-                {file_html if file_html else "<p>No files</p>"}
-            </div>
-
-        </div>
-
-    </body>
-    </html>
+    {file_html if file_html else "<p>No files</p>"}
     """
 
 # =========================
@@ -237,6 +165,7 @@ def dashboard(sid: str):
 # =========================
 @app.post("/upload")
 def upload(sid: str, file: UploadFile = File(...)):
+
     user = get_user(sid)
     if not user:
         return {"error": "unauthorized"}
@@ -249,7 +178,12 @@ def upload(sid: str, file: UploadFile = File(...)):
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
+    return HTMLResponse(f"""
+        <script>
+            alert('File uploaded successfully ✔');
+            window.location.href='/dashboard?sid={sid}';
+        </script>
+    """)
 
 # =========================
 # تحميل
