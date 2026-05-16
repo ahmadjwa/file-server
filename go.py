@@ -40,10 +40,10 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 # =========================
-# PASSWORD SECURITY (FIXED)
+# FIX: use Argon2 (NO 72-byte limit)
 # =========================
 pwd_context = CryptContext(
-    schemes=["bcrypt"],
+    schemes=["argon2"],
     deprecated="auto"
 )
 
@@ -109,20 +109,14 @@ def home(error: str = ""):
     """
 
 # =========================
-# REGISTER (FIXED 100%)
+# REGISTER (FIXED)
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
-
     try:
-        if not password:
-            return HTMLResponse("Password required")
-
-        # 🔥 FIX: bcrypt limit protection
-        if len(password.encode()) > 72:
-            return HTMLResponse("Password too long (max 72 bytes for bcrypt)")
+        password = password.strip()  # مهم: إزالة أي محارف مخفية
 
         existing = db.query(User).filter(User.username == username).first()
 
@@ -153,15 +147,13 @@ def register(username: str = Form(...), password: str = Form(...)):
 def login(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
-
     try:
+        password = password.strip()
+
         user = db.query(User).filter(User.username == username).first()
 
         if not user:
             return RedirectResponse(url="/?error=User not found", status_code=302)
-
-        if len(password.encode()) > 72:
-            return RedirectResponse(url="/?error=Password too long", status_code=302)
 
         if not pwd_context.verify(password, user.password):
             return RedirectResponse(url="/?error=Wrong password", status_code=302)
