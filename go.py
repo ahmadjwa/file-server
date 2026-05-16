@@ -72,6 +72,10 @@ def create_session(user):
 def get_user(sid):
     return sessions.get(sid)
 
+def delete_session(sid):
+    if sid in sessions:
+        del sessions[sid]
+
 # =========================
 # HOME PAGE
 # =========================
@@ -229,7 +233,15 @@ def login(username: str = Form(...), password: str = Form(...)):
         db.close()
 
 # =========================
-# DASHBOARD (MODERN UI)
+# LOGOUT (NEW)
+# =========================
+@app.get("/logout")
+def logout(sid: str):
+    delete_session(sid)
+    return RedirectResponse(url="/?error=Logged out successfully", status_code=302)
+
+# =========================
+# DASHBOARD (MODERN UI with Logout & Back buttons)
 # =========================
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(sid: str):
@@ -283,6 +295,45 @@ def dashboard(sid: str):
             .navbar h2 {{
                 color:#60a5fa;
                 margin:0;
+            }}
+
+            .nav-buttons {{
+                display:flex;
+                gap:12px;
+                align-items:center;
+            }}
+
+            .username {{
+                color:#e5e7eb;
+                margin-right:10px;
+            }}
+
+            .nav-btn {{
+                padding:8px 16px;
+                border:none;
+                border-radius:8px;
+                cursor:pointer;
+                text-decoration:none;
+                font-size:14px;
+                transition:0.3s;
+            }}
+
+            .back-btn {{
+                background:#4b5563;
+                color:white;
+            }}
+
+            .back-btn:hover {{
+                background:#374151;
+            }}
+
+            .logout-btn {{
+                background:#ef4444;
+                color:white;
+            }}
+
+            .logout-btn:hover {{
+                background:#dc2626;
             }}
 
             .container {{
@@ -367,13 +418,22 @@ def dashboard(sid: str):
             }}
 
         </style>
+        <script>
+            function goBack() {{
+                window.history.back();
+            }}
+        </script>
     </head>
 
     <body>
 
         <div class="navbar">
             <h2>☁ Cloud Drive</h2>
-            <div>👤 {user}</div>
+            <div class="nav-buttons">
+                <span class="username">👤 {user}</span>
+                <button onclick="goBack()" class="nav-btn back-btn">← Back</button>
+                <a href="/logout?sid={sid}" class="nav-btn logout-btn">Logout</a>
+            </div>
         </div>
 
         <div class="container">
