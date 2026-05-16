@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from passlib.context import CryptContext
 import os
 import random
+import traceback
 
 import cloudinary
 import cloudinary.uploader
@@ -12,7 +13,7 @@ import cloudinary.uploader
 app = FastAPI()
 
 # =========================
-# CLOUDINARY
+# CLOUDINARY CONFIG
 # =========================
 cloudinary.config(
     cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
@@ -21,13 +22,14 @@ cloudinary.config(
 )
 
 # =========================
-# DATABASE FIX (IMPORTANT)
+# DATABASE SAFE SETUP
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise Exception("DATABASE_URL is not set in Render environment variables")
+    raise Exception("DATABASE_URL is missing in Render Environment Variables")
 
+# Fix Render PostgreSQL format
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgres://",
@@ -50,7 +52,7 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 # =========================
-# SECURITY
+# PASSWORD HASH
 # =========================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -74,12 +76,8 @@ class File(Base):
     url = Column(String)
     public_id = Column(String)
 
-# =========================
-# CREATE TABLES SAFELY
-# =========================
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
+# create tables
+Base.metadata.create_all(bind=engine)
 
 # =========================
 # SESSIONS
@@ -137,16 +135,15 @@ def home(error: str = "", success: str = ""):
     """
 
 # =========================
-# REGISTER
+# REGISTER (SAFE)
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
-
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(User.username == username).first()
 
-        if existing:
+        if user:
             return RedirectResponse("/?error=User exists", status_code=302)
 
         db.add(User(
@@ -157,15 +154,18 @@ def register(username: str = Form(...), password: str = Form(...)):
 
         return RedirectResponse("/?success=Account created", status_code=302)
 
+    except Exception as e:
+        print("REGISTER ERROR:", traceback.format_exc())
+        return {"error": str(e)}
+
     finally:
         db.close()
 
 # =========================
-# LOGIN
+# LOGIN (SAFE)
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
-
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == username).first()
@@ -179,6 +179,10 @@ def login(username: str = Form(...), password: str = Form(...)):
         sid = create_session(username)
 
         return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
+
+    except Exception as e:
+        print("LOGIN ERROR:", traceback.format_exc())
+        return {"error": str(e)}
 
     finally:
         db.close()
