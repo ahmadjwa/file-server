@@ -8,4 +8,3 @@ passlib[bcrypt]
 argon2_cffi
 bcrypt
 cloudinary
-cloudinary.uploader
