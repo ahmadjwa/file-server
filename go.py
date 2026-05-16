@@ -8,40 +8,61 @@ app = FastAPI()
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# =====================
-# واجهة الموقع (Frontend)
-# =====================
+# ======================
+# الصفحة الرئيسية
+# ======================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """
+    files = os.listdir(UPLOAD_DIR)
+
+    file_list_html = ""
+    for f in files:
+        file_list_html += f"""
+        <li>
+            {f} 
+            <a href="/download/{f}">
+                <button>⬇ Download</button>
+            </a>
+        </li>
+        """
+
+    return f"""
     <html>
     <head>
-        <title>Cloud File Server</title>
+        <title>File Manager</title>
         <style>
-            body { font-family: Arial; text-align: center; background:#f4f4f4; }
-            .box { background:white; padding:20px; margin:50px auto; width:300px; border-radius:10px; }
-            input, button { margin:10px; padding:10px; width:90%; }
+            body {{ font-family: Arial; background:#f4f4f4; text-align:center; }}
+            .box {{ background:white; padding:20px; margin:30px auto; width:400px; border-radius:10px; }}
+            button {{ padding:8px; margin:5px; }}
+            ul {{ list-style:none; padding:0; }}
         </style>
     </head>
     <body>
+
         <div class="box">
-            <h2>📁 File Upload System</h2>
-            
+            <h2>📁 File Manager</h2>
+
             <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file">
-                <button type="submit">⬆️ Upload</button>
+                <input type="file" name="file" required>
+                <button type="submit">⬆ Upload</button>
             </form>
 
-            <br>
-            <a href="/files">📂 View Files (JSON)</a>
+            <hr>
+
+            <h3>📂 Files</h3>
+            <ul>
+                {file_list_html if file_list_html else "<p>No files yet</p>"}
+            </ul>
+
         </div>
+
     </body>
     </html>
     """
 
-# =====================
-# رفع الملفات
-# =====================
+# ======================
+# رفع ملف
+# ======================
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -51,16 +72,9 @@ async def upload_file(file: UploadFile = File(...)):
 
     return {"message": "uploaded", "filename": file.filename}
 
-# =====================
-# عرض الملفات
-# =====================
-@app.get("/files")
-def list_files():
-    return os.listdir(UPLOAD_DIR)
-
-# =====================
-# تحميل الملفات
-# =====================
+# ======================
+# تحميل ملف
+# ======================
 @app.get("/download/{filename}")
 def download_file(filename: str):
     file_path = os.path.join(UPLOAD_DIR, filename)
