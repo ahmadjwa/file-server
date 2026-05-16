@@ -1,88 +1,129 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from passlib.hash import bcrypt
 import os
 import shutil
 import random
 
 app = FastAPI()
 
+# =========================
+# قاعدة البيانات
+# =========================
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+# =========================
+# جدول المستخدمين
+# =========================
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True)
+    password = Column(String)
+
+Base.metadata.create_all(bind=engine)
+
+# =========================
+# الملفات
+# =========================
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-users = {}
 sessions = {}
 
 # =========================
-# إنشاء جلسة
+# جلسات
 # =========================
 def create_session(user):
     sid = str(random.randint(100000, 999999))
     sessions[sid] = user
     return sid
 
+
 def get_user(sid):
     return sessions.get(sid)
 
 # =========================
-# 🔥 الصفحة الرئيسية (تم إصلاح Not Found)
+# الصفحة الرئيسية
 # =========================
 @app.get("/", response_class=HTMLResponse)
-def root():
-    return """
+def home(error: str = ""):
+
+    error_html = ""
+    if error:
+        error_html = f"<div style='color:red;margin-bottom:10px'>{error}</div>"
+
+    return f"""
     <html>
     <head>
         <title>Cloud Drive</title>
         <style>
-            body{
+            body {{
                 margin:0;
                 font-family:Arial;
                 background:#0f172a;
+                color:white;
                 display:flex;
                 justify-content:center;
                 align-items:center;
                 height:100vh;
-                color:white;
-            }
-            .box{
+            }}
+
+            .box {{
                 background:#1e293b;
-                padding:25px;
+                padding:30px;
                 border-radius:12px;
-                width:320px;
-                text-align:center;
+                width:350px;
                 box-shadow:0 10px 30px rgba(0,0,0,0.4);
-            }
-            input{
+            }}
+
+            input {{
                 width:100%;
                 padding:10px;
                 margin:5px 0;
-                border-radius:6px;
                 border:none;
-            }
-            button{
+                border-radius:6px;
+            }}
+
+            button {{
                 width:100%;
                 padding:10px;
-                margin-top:10px;
-                border:none;
-                border-radius:6px;
                 background:#3b82f6;
                 color:white;
+                border:none;
+                border-radius:6px;
+                margin-top:10px;
                 cursor:pointer;
-            }
-            button:hover{
+            }}
+
+            button:hover {{
                 background:#2563eb;
-            }
-            hr{opacity:0.3}
+            }}
+
+            hr {{ opacity:0.3; }}
         </style>
     </head>
 
     <body>
+
         <div class="box">
+
             <h2>☁ Cloud Drive</h2>
+
+            {error_html}
 
             <h3>Login</h3>
             <form action="/login" method="post">
                 <input name="username" placeholder="Username" required>
-                <input name="password" type="password" placeholder="Password" required>
+                <input type="password" name="password" placeholder="Password" required>
                 <button>Login</button>
             </form>
 
@@ -91,46 +132,71 @@ def root():
             <h3>Register</h3>
             <form action="/register" method="post">
                 <input name="username" placeholder="Username" required>
-                <input name="password" type="password" required>
+                <input type="password" name="password" placeholder="Password" required>
                 <button>Create Account</button>
             </form>
+
         </div>
+
     </body>
     </html>
     """
 
 # =========================
-# تسجيل حساب
+# Register
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
-    users[username] = password
-    return RedirectResponse("/", status_code=302)
+
+    db = SessionLocal()
+
+    existing = db.query(User).filter(User.username == username).first()
+
+    if existing:
+        return RedirectResponse(url='/?error=Username already exists', status_code=302)
+
+    hashed_password = bcrypt.hash(password)
+
+    user = User(
+        username=username,
+        password=hashed_password
+    )
+
+    db.add(user)
+    db.commit()
+
+    return RedirectResponse(url='/?error=Account created successfully', status_code=302)
 
 # =========================
-# تسجيل دخول
+# Login
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
-    if users.get(username) != password:
-        return HTMLResponse("""
-            <script>
-                alert('Wrong username or password');
-                window.location.href='/';
-            </script>
-        """)
+
+    db = SessionLocal()
+
+    user = db.query(User).filter(User.username == username).first()
+
+    if not user:
+        return RedirectResponse(url='/?error=User not found', status_code=302)
+
+    if not bcrypt.verify(password, user.password):
+        return RedirectResponse(url='/?error=Wrong password', status_code=302)
 
     sid = create_session(username)
-    return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
+
+    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
 
 # =========================
-# داشبورد احترافي
+# Dashboard
 # =========================
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(sid: str):
+
     user = get_user(sid)
+
     if not user:
-        return RedirectResponse("/")
+        return RedirectResponse(url='/')
 
     user_dir = os.path.join(UPLOAD_DIR, user)
     os.makedirs(user_dir, exist_ok=True)
@@ -138,51 +204,117 @@ def dashboard(sid: str):
     files = os.listdir(user_dir)
 
     cards = ""
+
     for f in files:
         cards += f"""
-        <div style="background:#1e293b;padding:10px;margin:10px;border-radius:10px;">
-            📄 {f}<br><br>
-            <a href="/download/{user}/{f}">
-                <button style="background:#22c55e;color:white;">⬇ Download</button>
+        <div class='card'>
+            <div>📄 {f}</div>
+
+            <a href='/download/{user}/{f}'>
+                <button class='download'>⬇ Download</button>
             </a>
 
-            <a href="/delete/{user}/{f}?sid={sid}">
-                <button style="background:#ef4444;color:white;">🗑 Delete</button>
+            <a href='/delete/{user}/{f}?sid={sid}'>
+                <button class='delete'>🗑 Delete</button>
             </a>
         </div>
         """
 
     return f"""
     <html>
-    <body style="background:#0f172a;color:white;font-family:Arial;">
-        <div style="text-align:center;padding:15px;background:#111827;">
-            👤 Welcome {user}
+    <head>
+        <style>
+            body {{
+                margin:0;
+                font-family:Arial;
+                background:#0f172a;
+                color:white;
+            }}
+
+            .top {{
+                background:#111827;
+                padding:20px;
+                text-align:center;
+                font-size:20px;
+            }}
+
+            .container {{
+                padding:20px;
+                text-align:center;
+            }}
+
+            .upload {{
+                background:#1e293b;
+                padding:20px;
+                border-radius:12px;
+                width:300px;
+                margin:auto;
+            }}
+
+            .grid {{
+                display:flex;
+                flex-wrap:wrap;
+                justify-content:center;
+                margin-top:20px;
+            }}
+
+            .card {{
+                background:#1e293b;
+                width:220px;
+                margin:10px;
+                padding:15px;
+                border-radius:10px;
+            }}
+
+            button {{
+                width:100%;
+                padding:10px;
+                margin-top:8px;
+                border:none;
+                border-radius:6px;
+                color:white;
+                cursor:pointer;
+            }}
+
+            .download {{ background:#22c55e; }}
+            .delete {{ background:#ef4444; }}
+            .uploadbtn {{ background:#3b82f6; }}
+        </style>
+    </head>
+
+    <body>
+
+        <div class='top'>👤 {user}</div>
+
+        <div class='container'>
+
+            <div class='upload'>
+                <form action='/upload?sid={sid}' method='post' enctype='multipart/form-data'>
+                    <input type='file' name='file' required>
+                    <button class='uploadbtn'>⬆ Upload</button>
+                </form>
+            </div>
+
+            <div class='grid'>
+                {cards if cards else '<p>No files yet</p>'}
+            </div>
+
         </div>
 
-        <div style="text-align:center;margin-top:20px;">
-            <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" required>
-                <button style="padding:10px;background:#3b82f6;color:white;border:none;border-radius:6px;">
-                    Upload
-                </button>
-            </form>
-        </div>
-
-        <div style="display:flex;flex-wrap:wrap;justify-content:center;">
-            {cards if cards else "<p>No files yet</p>"}
-        </div>
     </body>
     </html>
     """
 
 # =========================
-# رفع ملف
+# Upload
 # =========================
 @app.post("/upload")
 def upload(sid: str, file: UploadFile = File(...)):
+
     user = get_user(sid)
+
     if not user:
-        return RedirectResponse("/")
+        return RedirectResponse(url='/')
 
     user_dir = os.path.join(UPLOAD_DIR, user)
     os.makedirs(user_dir, exist_ok=True)
@@ -192,13 +324,14 @@ def upload(sid: str, file: UploadFile = File(...)):
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
+    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
 
 # =========================
-# تحميل ملف
+# Download
 # =========================
 @app.get("/download/{user}/{filename}")
 def download(user: str, filename: str):
+
     path = os.path.join(UPLOAD_DIR, user, filename)
 
     if os.path.exists(path):
@@ -207,13 +340,14 @@ def download(user: str, filename: str):
     return {"error": "not found"}
 
 # =========================
-# حذف ملف
+# Delete
 # =========================
 @app.get("/delete/{user}/{filename}")
 def delete(user: str, filename: str, sid: str):
+
     path = os.path.join(UPLOAD_DIR, user, filename)
 
     if os.path.exists(path):
         os.remove(path)
 
-    return RedirectResponse(f"/dashboard?sid={sid}")
+    return RedirectResponse(url=f'/dashboard?sid={sid}', status_code=302)
