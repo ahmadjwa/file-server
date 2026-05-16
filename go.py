@@ -21,19 +21,36 @@ cloudinary.config(
 )
 
 # =========================
-# DATABASE
+# DATABASE (FIXED FOR RENDER)
 # =========================
-DATABASE_URL = os.environ.get("DATABASE_URL") or "sqlite:///./test.db"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# مهم جدًا لـ Render PostgreSQL
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgres://",
+        "postgresql+psycopg2://",
+        1
+    )
 
 connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
+
+if DATABASE_URL and DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args=connect_args
+)
+
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# =========================
+# PASSWORD SECURITY
+# =========================
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # =========================
 # MODELS
@@ -58,7 +75,7 @@ class File(Base):
 Base.metadata.create_all(bind=engine)
 
 # =========================
-# SESSIONS
+# SESSIONS (TEMP MEMORY)
 # =========================
 sessions = {}
 
@@ -74,7 +91,7 @@ def delete_session(sid):
     sessions.pop(sid, None)
 
 # =========================
-# HOME
+# HOME PAGE
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = "", success: str = ""):
@@ -139,7 +156,7 @@ def register(username: str = Form(...), password: str = Form(...)):
         db.close()
 
 # =========================
-# LOGIN
+# LOGIN (FIXED SECURITY CHECK)
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
@@ -151,6 +168,7 @@ def login(username: str = Form(...), password: str = Form(...)):
         if not user:
             return RedirectResponse("/?error=User not found", status_code=302)
 
+        # FIX: safe password verify
         if not pwd_context.verify(password, user.password):
             return RedirectResponse("/?error=Wrong password", status_code=302)
 
