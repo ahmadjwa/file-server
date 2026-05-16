@@ -337,7 +337,7 @@ def home(error: str = "", success: str = ""):
             <div class="logo">
                 <div class="logo-icon">🚀</div>
                 <h2>Super Uploader</h2>
-                <div class="subtitle">Your Premium Cloud Storage</div>
+                <div class="subtitle">Free Upload Your Files</div>
             </div>
             
             {message_html}
