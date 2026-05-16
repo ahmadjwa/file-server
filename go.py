@@ -28,6 +28,10 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
 
 # =========================
 # جدول المستخدمين
