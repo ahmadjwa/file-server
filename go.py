@@ -87,91 +87,237 @@ def home(error: str = ""):
     return f"""
     <html>
     <head>
-        <title>Cloud Drive</title>
+        <title>Super Uploader | Cloud Storage</title>
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
             body {{
                 margin:0;
-                font-family:Arial;
-                background: linear-gradient(135deg,#0f172a,#1e293b);
+                font-family: 'Inter', sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color:white;
                 display:flex;
                 justify-content:center;
                 align-items:center;
-                height:100vh;
+                min-height:100vh;
+                position: relative;
+                overflow-x: hidden;
+            }}
+            
+            body::before {{
+                content: '';
+                position: absolute;
+                width: 200%;
+                height: 200%;
+                background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+                background-size: 50px 50px;
+                animation: moveBackground 20s linear infinite;
+                pointer-events: none;
+            }}
+            
+            @keyframes moveBackground {{
+                0% {{
+                    transform: translate(0, 0);
+                }}
+                100% {{
+                    transform: translate(50px, 50px);
+                }}
             }}
 
             .box {{
-                background:#111827;
-                padding:30px;
-                border-radius:15px;
-                width:350px;
-                box-shadow:0 10px 40px rgba(0,0,0,0.5);
+                background: rgba(17, 24, 39, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 40px;
+                border-radius: 24px;
+                width: 400px;
+                box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+                border: 1px solid rgba(255,255,255,0.2);
+                animation: fadeInUp 0.6s ease-out;
+                position: relative;
+                z-index: 1;
+            }}
+            
+            @keyframes fadeInUp {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(30px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
 
+            .logo {{
+                text-align: center;
+                margin-bottom: 30px;
+            }}
+            
+            .logo-icon {{
+                font-size: 60px;
+                margin-bottom: 10px;
+                display: inline-block;
+                animation: float 3s ease-in-out infinite;
+            }}
+            
+            @keyframes float {{
+                0%, 100% {{
+                    transform: translateY(0);
+                }}
+                50% {{
+                    transform: translateY(-10px);
+                }}
+            }}
+            
             h2 {{
                 text-align:center;
-                color:#60a5fa;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                font-size: 28px;
+                font-weight: 800;
+                margin-top: 10px;
+            }}
+            
+            .subtitle {{
+                text-align: center;
+                color: #9ca3af;
+                font-size: 14px;
+                margin-top: 5px;
             }}
 
             input {{
                 width:100%;
-                padding:10px;
-                margin:6px 0;
-                border:none;
-                border-radius:8px;
-                background:#1f2937;
+                padding: 12px 16px;
+                margin: 8px 0;
+                border: 2px solid #374151;
+                border-radius: 12px;
+                background: #1f2937;
                 color:white;
+                font-size: 14px;
+                transition: all 0.3s;
+                font-family: 'Inter', sans-serif;
+            }}
+            
+            input:focus {{
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }}
+            
+            input::placeholder {{
+                color: #6b7280;
             }}
 
             button {{
                 width:100%;
-                padding:10px;
-                margin-top:10px;
-                border:none;
-                border-radius:8px;
-                background:#3b82f6;
+                padding: 12px;
+                margin-top: 16px;
+                border: none;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color:white;
                 cursor:pointer;
+                font-size: 16px;
+                font-weight: 600;
+                transition: all 0.3s;
+                font-family: 'Inter', sans-serif;
+                position: relative;
+                overflow: hidden;
             }}
-
+            
+            button::before {{
+                content: '';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 0;
+                height: 0;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.3);
+                transform: translate(-50%, -50%);
+                transition: width 0.6s, height 0.6s;
+            }}
+            
+            button:hover::before {{
+                width: 300px;
+                height: 300px;
+            }}
+            
             button:hover {{
-                background:#2563eb;
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.4);
+            }}
+            
+            button:active {{
+                transform: translateY(0);
             }}
 
             hr {{
                 border:0;
                 height:1px;
-                background:#374151;
-                margin:15px 0;
+                background: linear-gradient(90deg, transparent, #374151, transparent);
+                margin: 25px 0;
+            }}
+            
+            .section-title {{
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 15px;
+                color: #e5e7eb;
+            }}
+            
+            .error-message {{
+                background: rgba(239, 68, 68, 0.2);
+                border: 1px solid #ef4444;
+                border-radius: 12px;
+                padding: 12px;
+                margin-bottom: 20px;
+                text-align: center;
+                animation: shake 0.5s;
+            }}
+            
+            @keyframes shake {{
+                0%, 100% {{ transform: translateX(0); }}
+                25% {{ transform: translateX(-10px); }}
+                75% {{ transform: translateX(10px); }}
             }}
         </style>
     </head>
 
     <body>
-
         <div class="box">
-
-            <h2>☁ Cloud Drive</h2>
-            {error_html}
+            <div class="logo">
+                <div class="logo-icon">🚀</div>
+                <h2>Super Uploader</h2>
+                <div class="subtitle">Your Premium Cloud Storage</div>
+            </div>
+            
+            {f'<div class="error-message">{error}</div>' if error else ''}
 
             <form action="/login" method="post">
-                <h3>Login</h3>
+                <div class="section-title">🔐 Login to your account</div>
                 <input name="username" placeholder="Username" required>
                 <input type="password" name="password" placeholder="Password" required>
-                <button>Login</button>
+                <button>✨ Login ✨</button>
             </form>
 
             <hr>
 
             <form action="/register" method="post">
-                <h3>Register</h3>
+                <div class="section-title">🆕 Create new account</div>
                 <input name="username" placeholder="Username" required>
                 <input type="password" name="password" placeholder="Password" required>
-                <button>Create Account</button>
+                <button>🚀 Sign Up 🚀</button>
             </form>
-
         </div>
-
     </body>
     </html>
     """
@@ -233,7 +379,7 @@ def login(username: str = Form(...), password: str = Form(...)):
         db.close()
 
 # =========================
-# LOGOUT (NEW)
+# LOGOUT
 # =========================
 @app.get("/logout")
 def logout(sid: str):
@@ -260,12 +406,13 @@ def dashboard(sid: str):
 
     for f in files:
         cards += f"""
-        <div class="card">
-            <div class="file">📄 {f}</div>
-
+        <div class="card" data-filename="{f}">
+            <div class="file-icon">📄</div>
+            <div class="file-name">{f}</div>
+            <div class="file-size">{os.path.getsize(os.path.join(user_dir, f))} bytes</div>
             <div class="actions">
-                <a class="btn download" href="/download/{user}/{f}">Download</a>
-                <a class="btn delete" href="/delete/{user}/{f}?sid={sid}">Delete</a>
+                <a class="btn download" href="/download/{user}/{f}">⬇️ Download</a>
+                <a class="btn delete" href="/delete/{user}/{f}?sid={sid}">🗑️ Delete</a>
             </div>
         </div>
         """
@@ -273,150 +420,309 @@ def dashboard(sid: str):
     return f"""
     <html>
     <head>
-        <title>Dashboard</title>
+        <title>Dashboard | Super Uploader</title>
         <style>
-
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+            
             body {{
                 margin:0;
-                font-family:Arial;
-                background:#0b1220;
+                font-family: 'Inter', sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color:white;
+                min-height: 100vh;
             }}
-
+            
             .navbar {{
-                background:#111827;
-                padding:15px 25px;
+                background: rgba(17, 24, 39, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 18px 30px;
                 display:flex;
                 justify-content:space-between;
                 align-items:center;
-                box-shadow:0 5px 20px rgba(0,0,0,0.4);
+                box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+                border-bottom: 1px solid rgba(255,255,255,0.1);
             }}
-
+            
+            .logo-section {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }}
+            
+            .logo-icon {{
+                font-size: 32px;
+                animation: spin 10s linear infinite;
+            }}
+            
+            @keyframes spin {{
+                from {{ transform: rotate(0deg); }}
+                to {{ transform: rotate(360deg); }}
+            }}
+            
             .navbar h2 {{
-                color:#60a5fa;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+                font-size: 24px;
+                font-weight: 800;
                 margin:0;
             }}
-
+            
             .nav-buttons {{
                 display:flex;
-                gap:12px;
+                gap: 12px;
                 align-items:center;
             }}
-
+            
+            .user-info {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: rgba(102, 126, 234, 0.2);
+                padding: 8px 16px;
+                border-radius: 12px;
+                border: 1px solid rgba(102, 126, 234, 0.3);
+            }}
+            
             .username {{
-                color:#e5e7eb;
-                margin-right:10px;
+                color: #e5e7eb;
+                font-weight: 500;
             }}
-
+            
             .nav-btn {{
-                padding:8px 16px;
-                border:none;
-                border-radius:8px;
-                cursor:pointer;
-                text-decoration:none;
-                font-size:14px;
-                transition:0.3s;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                text-decoration: none;
+                font-size: 14px;
+                font-weight: 600;
+                transition: all 0.3s;
+                font-family: 'Inter', sans-serif;
             }}
-
+            
             .back-btn {{
-                background:#4b5563;
-                color:white;
+                background: rgba(75, 85, 99, 0.9);
+                color: white;
             }}
-
+            
             .back-btn:hover {{
-                background:#374151;
+                background: #4b5563;
+                transform: translateY(-2px);
             }}
-
+            
             .logout-btn {{
-                background:#ef4444;
-                color:white;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
             }}
-
+            
             .logout-btn:hover {{
-                background:#dc2626;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3);
             }}
-
+            
             .container {{
-                max-width:1000px;
-                margin:auto;
-                padding:25px;
+                max-width: 1200px;
+                margin: auto;
+                padding: 30px;
             }}
-
+            
             .upload-box {{
-                background:#111827;
-                padding:15px;
-                border-radius:12px;
-                margin-bottom:20px;
+                background: rgba(17, 24, 39, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 25px;
+                border-radius: 20px;
+                margin-bottom: 30px;
+                border: 1px solid rgba(255,255,255,0.2);
+                transition: all 0.3s;
             }}
-
+            
+            .upload-box:hover {{
+                transform: translateY(-5px);
+                box-shadow: 0 20px 40px -15px rgba(0,0,0,0.3);
+            }}
+            
+            .upload-title {{
+                font-size: 20px;
+                font-weight: 600;
+                margin-bottom: 15px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }}
+            
             input[type=file] {{
-                color:white;
+                color: white;
+                padding: 10px;
+                background: #1f2937;
+                border-radius: 12px;
+                border: 2px solid #374151;
+                cursor: pointer;
             }}
-
+            
+            input[type=file]::file-selector-button {{
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 8px 20px;
+                border: none;
+                border-radius: 10px;
+                cursor: pointer;
+                font-weight: 600;
+                margin-right: 10px;
+            }}
+            
             button {{
-                padding:10px 15px;
-                border:none;
-                border-radius:8px;
-                background:#3b82f6;
-                color:white;
-                cursor:pointer;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 14px;
+                transition: all 0.3s;
+                font-family: 'Inter', sans-serif;
+                margin-left: 10px;
             }}
-
+            
+            button:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.4);
+            }}
+            
+            .stats {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }}
+            
+            .file-count {{
+                background: rgba(102, 126, 234, 0.2);
+                padding: 8px 16px;
+                border-radius: 12px;
+                font-size: 14px;
+                font-weight: 500;
+            }}
+            
             .grid {{
                 display:grid;
-                grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-                gap:15px;
+                grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+                gap: 20px;
             }}
-
+            
             .card {{
-                background:#111827;
-                padding:15px;
-                border-radius:12px;
-                border:1px solid #1f2937;
-                transition:0.3s;
+                background: rgba(17, 24, 39, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 20px;
+                border-radius: 20px;
+                border: 1px solid rgba(255,255,255,0.2);
+                transition: all 0.3s;
+                animation: fadeInUp 0.5s ease-out;
             }}
-
+            
+            @keyframes fadeInUp {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
+            }}
+            
             .card:hover {{
-                transform:translateY(-5px);
-                border-color:#3b82f6;
+                transform: translateY(-8px) scale(1.02);
+                border-color: #667eea;
+                box-shadow: 0 20px 40px -15px rgba(102, 126, 234, 0.3);
             }}
-
-            .file {{
-                margin-bottom:10px;
-                word-break:break-word;
-                color:#e5e7eb;
+            
+            .file-icon {{
+                font-size: 48px;
+                text-align: center;
+                margin-bottom: 10px;
             }}
-
+            
+            .file-name {{
+                font-weight: 600;
+                margin-bottom: 5px;
+                word-break: break-word;
+                color: #e5e7eb;
+                text-align: center;
+                font-size: 16px;
+            }}
+            
+            .file-size {{
+                font-size: 12px;
+                color: #9ca3af;
+                text-align: center;
+                margin-bottom: 15px;
+            }}
+            
             .actions {{
                 display:flex;
-                gap:8px;
+                gap: 10px;
             }}
-
+            
             .btn {{
                 flex:1;
                 text-align:center;
-                padding:8px;
-                border-radius:6px;
+                padding: 10px;
+                border-radius: 10px;
                 text-decoration:none;
-                font-size:13px;
+                font-size: 13px;
+                font-weight: 600;
+                transition: all 0.3s;
             }}
-
+            
             .download {{
-                background:#22c55e;
+                background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
                 color:white;
             }}
-
+            
+            .download:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(34, 197, 94, 0.3);
+            }}
+            
             .delete {{
-                background:#ef4444;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
                 color:white;
             }}
-
-            .empty {{
-                text-align:center;
-                color:#94a3b8;
-                margin-top:30px;
+            
+            .delete:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(239, 68, 68, 0.3);
             }}
-
+            
+            .empty {{
+                text-align: center;
+                padding: 60px;
+                background: rgba(17, 24, 39, 0.5);
+                border-radius: 20px;
+                color: #9ca3af;
+                font-size: 18px;
+                grid-column: 1 / -1;
+            }}
+            
+            @keyframes slideIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateX(-20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateX(0);
+                }}
+            }}
         </style>
         <script>
             function goBack() {{
@@ -426,31 +732,43 @@ def dashboard(sid: str):
     </head>
 
     <body>
-
         <div class="navbar">
-            <h2>☁ Cloud Drive</h2>
+            <div class="logo-section">
+                <div class="logo-icon">🚀</div>
+                <h2>Super Uploader</h2>
+            </div>
             <div class="nav-buttons">
-                <span class="username">👤 {user}</span>
+                <div class="user-info">
+                    <span>👤</span>
+                    <span class="username">{user}</span>
+                </div>
                 <button onclick="goBack()" class="nav-btn back-btn">← Back</button>
-                <a href="/logout?sid={sid}" class="nav-btn logout-btn">Logout</a>
+                <a href="/logout?sid={sid}" class="nav-btn logout-btn">🚪 Logout</a>
             </div>
         </div>
 
         <div class="container">
-
             <div class="upload-box">
+                <div class="upload-title">
+                    <span>📤</span>
+                    <span>Upload New File</span>
+                </div>
                 <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
                     <input type="file" name="file" required>
-                    <button>Upload</button>
+                    <button>⬆️ Upload Now</button>
                 </form>
+            </div>
+            
+            <div class="stats">
+                <div class="file-count">
+                    📁 Total Files: {len(files)}
+                </div>
             </div>
 
             <div class="grid">
-                {cards if cards else "<div class='empty'>No files uploaded yet</div>"}
+                {cards if cards else "<div class='empty'>✨ No files uploaded yet<br>Click the upload button to get started! ✨</div>"}
             </div>
-
         </div>
-
     </body>
     </html>
     """
