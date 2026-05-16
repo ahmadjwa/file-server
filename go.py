@@ -39,7 +39,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256"],
+    deprecated="auto"
+)
 
 # =========================
 # USER TABLE
@@ -54,7 +57,7 @@ class User(Base):
 Base.metadata.create_all(bind=engine)
 
 # =========================
-# FILE STORAGE
+# FILES
 # =========================
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -69,26 +72,23 @@ def create_session(user):
 def get_user(sid):
     return sessions.get(sid)
 
-def delete_session(sid):
-    if sid in sessions:
-        del sessions[sid]
-
 # =========================
-# HOME PAGE (LOGIN + REGISTER)
+# HOME PAGE
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = ""):
 
-    error_html = f"<div class='error'>{error}</div>" if error else ""
+    error_html = f"<div style='color:#f87171;margin-bottom:10px'>{error}</div>" if error else ""
 
     return f"""
     <html>
     <head>
+        <title>Cloud Drive</title>
         <style>
             body {{
                 margin:0;
                 font-family:Arial;
-                background:linear-gradient(135deg,#0f172a,#1e293b);
+                background: linear-gradient(135deg,#0f172a,#1e293b);
                 color:white;
                 display:flex;
                 justify-content:center;
@@ -100,8 +100,13 @@ def home(error: str = ""):
                 background:#111827;
                 padding:30px;
                 border-radius:15px;
-                width:360px;
-                box-shadow:0 10px 30px rgba(0,0,0,0.4);
+                width:350px;
+                box-shadow:0 10px 40px rgba(0,0,0,0.5);
+            }}
+
+            h2 {{
+                text-align:center;
+                color:#60a5fa;
             }}
 
             input {{
@@ -110,7 +115,8 @@ def home(error: str = ""):
                 margin:6px 0;
                 border:none;
                 border-radius:8px;
-                outline:none;
+                background:#1f2937;
+                color:white;
             }}
 
             button {{
@@ -119,44 +125,49 @@ def home(error: str = ""):
                 margin-top:10px;
                 border:none;
                 border-radius:8px;
-                cursor:pointer;
                 background:#3b82f6;
                 color:white;
-                font-weight:bold;
+                cursor:pointer;
             }}
 
             button:hover {{
                 background:#2563eb;
             }}
 
-            .error {{
-                background:#ef4444;
-                padding:8px;
-                border-radius:6px;
-                margin-bottom:10px;
+            hr {{
+                border:0;
+                height:1px;
+                background:#374151;
+                margin:15px 0;
             }}
         </style>
     </head>
 
     <body>
+
         <div class="box">
+
             <h2>☁ Cloud Drive</h2>
             {error_html}
 
-            <h3>Login</h3>
             <form action="/login" method="post">
+                <h3>Login</h3>
                 <input name="username" placeholder="Username" required>
                 <input type="password" name="password" placeholder="Password" required>
                 <button>Login</button>
             </form>
 
-            <h3>Register</h3>
+            <hr>
+
             <form action="/register" method="post">
+                <h3>Register</h3>
                 <input name="username" placeholder="Username" required>
                 <input type="password" name="password" placeholder="Password" required>
                 <button>Create Account</button>
             </form>
+
         </div>
+
     </body>
     </html>
     """
@@ -169,6 +180,8 @@ def register(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
     try:
+        password = password.strip()
+
         existing = db.query(User).filter(User.username == username).first()
 
         if existing:
@@ -177,10 +190,15 @@ def register(username: str = Form(...), password: str = Form(...)):
         hashed = pwd_context.hash(password)
 
         user = User(username=username, password=hashed)
+
         db.add(user)
         db.commit()
 
         return RedirectResponse(url="/?error=Account created successfully", status_code=302)
+
+    except Exception as e:
+        db.rollback()
+        return HTMLResponse(f"<h1>Error</h1><pre>{e}</pre>")
 
     finally:
         db.close()
@@ -193,6 +211,8 @@ def login(username: str = Form(...), password: str = Form(...)):
 
     db = SessionLocal()
     try:
+        password = password.strip()
+
         user = db.query(User).filter(User.username == username).first()
 
         if not user:
@@ -207,14 +227,6 @@ def login(username: str = Form(...), password: str = Form(...)):
 
     finally:
         db.close()
-
-# =========================
-# LOGOUT (NEW)
-# =========================
-@app.get("/logout")
-def logout(sid: str):
-    delete_session(sid)
-    return RedirectResponse(url="/")
 
 # =========================
 # DASHBOARD (MODERN UI)
@@ -233,131 +245,148 @@ def dashboard(sid: str):
     files = os.listdir(user_dir)
 
     cards = ""
+
     for f in files:
         cards += f"""
         <div class="card">
             <div class="file">📄 {f}</div>
 
-            <a href="/download/{user}/{f}">
-                <button class="btn green">Download</button>
-            </a>
-
-            <a href="/delete/{user}/{f}?sid={sid}">
-                <button class="btn red">Delete</button>
-            </a>
+            <div class="actions">
+                <a class="btn download" href="/download/{user}/{f}">Download</a>
+                <a class="btn delete" href="/delete/{user}/{f}?sid={sid}">Delete</a>
+            </div>
         </div>
         """
 
     return f"""
     <html>
     <head>
+        <title>Dashboard</title>
         <style>
+
             body {{
                 margin:0;
                 font-family:Arial;
-                background:#0f172a;
+                background:#0b1220;
                 color:white;
             }}
 
-            .top {{
+            .navbar {{
                 background:#111827;
-                padding:15px;
+                padding:15px 25px;
                 display:flex;
                 justify-content:space-between;
                 align-items:center;
+                box-shadow:0 5px 20px rgba(0,0,0,0.4);
             }}
 
-            .btn {{
-                padding:8px 12px;
-                border:none;
-                border-radius:8px;
-                cursor:pointer;
-                color:white;
-            }}
-
-            .logout {{
-                background:#ef4444;
-            }}
-
-            .back {{
-                background:#6b7280;
+            .navbar h2 {{
+                color:#60a5fa;
+                margin:0;
             }}
 
             .container {{
-                padding:20px;
-                text-align:center;
+                max-width:1000px;
+                margin:auto;
+                padding:25px;
             }}
 
-            .upload {{
-                background:#1e293b;
-                padding:20px;
+            .upload-box {{
+                background:#111827;
+                padding:15px;
                 border-radius:12px;
-                width:320px;
-                margin:auto;
+                margin-bottom:20px;
+            }}
+
+            input[type=file] {{
+                color:white;
+            }}
+
+            button {{
+                padding:10px 15px;
+                border:none;
+                border-radius:8px;
+                background:#3b82f6;
+                color:white;
+                cursor:pointer;
             }}
 
             .grid {{
-                display:flex;
-                flex-wrap:wrap;
-                justify-content:center;
-                margin-top:20px;
+                display:grid;
+                grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                gap:15px;
             }}
 
             .card {{
-                background:#1e293b;
-                width:220px;
-                margin:10px;
+                background:#111827;
                 padding:15px;
-                border-radius:10px;
+                border-radius:12px;
+                border:1px solid #1f2937;
+                transition:0.3s;
+            }}
+
+            .card:hover {{
+                transform:translateY(-5px);
+                border-color:#3b82f6;
             }}
 
             .file {{
                 margin-bottom:10px;
+                word-break:break-word;
+                color:#e5e7eb;
             }}
 
-            .green {{
+            .actions {{
+                display:flex;
+                gap:8px;
+            }}
+
+            .btn {{
+                flex:1;
+                text-align:center;
+                padding:8px;
+                border-radius:6px;
+                text-decoration:none;
+                font-size:13px;
+            }}
+
+            .download {{
                 background:#22c55e;
-                width:100%;
-                margin-top:5px;
+                color:white;
             }}
 
-            .red {{
+            .delete {{
                 background:#ef4444;
-                width:100%;
-                margin-top:5px;
+                color:white;
             }}
 
-            .uploadbtn {{
-                background:#3b82f6;
-                width:100%;
+            .empty {{
+                text-align:center;
+                color:#94a3b8;
+                margin-top:30px;
             }}
+
         </style>
     </head>
 
     <body>
 
-        <div class="top">
+        <div class="navbar">
+            <h2>☁ Cloud Drive</h2>
             <div>👤 {user}</div>
-
-            <div>
-                <button class="btn back" onclick="history.back()">⬅ Back</button>
-                <a href="/logout?sid={sid}">
-                    <button class="btn logout">Logout</button>
-                </a>
-            </div>
         </div>
 
         <div class="container">
 
-            <div class="upload">
+            <div class="upload-box">
                 <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
                     <input type="file" name="file" required>
-                    <button class="btn uploadbtn">⬆ Upload</button>
+                    <button>Upload</button>
                 </form>
             </div>
 
             <div class="grid">
-                {cards if cards else "<p>No files yet</p>"}
+                {cards if cards else "<div class='empty'>No files uploaded yet</div>"}
             </div>
 
         </div>
