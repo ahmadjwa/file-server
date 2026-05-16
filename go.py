@@ -80,9 +80,25 @@ def delete_session(sid):
 # HOME PAGE
 # =========================
 @app.get("/", response_class=HTMLResponse)
-def home(error: str = ""):
+def home(error: str = "", success: str = ""):
 
-    error_html = f"<div style='color:#f87171;margin-bottom:10px'>{error}</div>" if error else ""
+    # تحديد لون الرسالة حسب النوع
+    message_html = ""
+    
+    if error:
+        message_html = f"""
+        <div class="message error-message">
+            <span class="message-icon">❌</span>
+            <span>{error}</span>
+        </div>
+        """
+    elif success:
+        message_html = f"""
+        <div class="message success-message">
+            <span class="message-icon">✅</span>
+            <span>{success}</span>
+        </div>
+        """
 
     return f"""
     <html>
@@ -274,20 +290,44 @@ def home(error: str = ""):
                 color: #e5e7eb;
             }}
             
-            .error-message {{
-                background: rgba(239, 68, 68, 0.2);
-                border: 1px solid #ef4444;
+            /* رسائل النجاح والفشل */
+            .message {{
+                padding: 12px 16px;
                 border-radius: 12px;
-                padding: 12px;
                 margin-bottom: 20px;
-                text-align: center;
-                animation: shake 0.5s;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                animation: slideIn 0.5s ease-out;
             }}
             
-            @keyframes shake {{
-                0%, 100% {{ transform: translateX(0); }}
-                25% {{ transform: translateX(-10px); }}
-                75% {{ transform: translateX(10px); }}
+            .success-message {{
+                background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(22, 163, 74, 0.2));
+                border: 2px solid #22c55e;
+                color: #4ade80;
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+            }}
+            
+            .error-message {{
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.2));
+                border: 2px solid #ef4444;
+                color: #fca5a5;
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+            }}
+            
+            .message-icon {{
+                font-size: 20px;
+            }}
+            
+            @keyframes slideIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateX(-20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateX(0);
+                }}
             }}
         </style>
     </head>
@@ -300,7 +340,7 @@ def home(error: str = ""):
                 <div class="subtitle">Your Premium Cloud Storage</div>
             </div>
             
-            {f'<div class="error-message">{error}</div>' if error else ''}
+            {message_html}
 
             <form action="/login" method="post">
                 <div class="section-title">🔐 Login to your account</div>
@@ -335,6 +375,7 @@ def register(username: str = Form(...), password: str = Form(...)):
         existing = db.query(User).filter(User.username == username).first()
 
         if existing:
+            # فشل - اسم المستخدم موجود
             return RedirectResponse(url="/?error=Username already exists", status_code=302)
 
         hashed = pwd_context.hash(password)
@@ -344,11 +385,13 @@ def register(username: str = Form(...), password: str = Form(...)):
         db.add(user)
         db.commit()
 
-        return RedirectResponse(url="/?error=Account created successfully", status_code=302)
+        # نجاح - تم إنشاء الحساب
+        return RedirectResponse(url="/?success=Account created successfully! 🎉", status_code=302)
 
     except Exception as e:
         db.rollback()
-        return HTMLResponse(f"<h1>Error</h1><pre>{e}</pre>")
+        # فشل - خطأ في النظام
+        return RedirectResponse(url=f"/?error=Registration failed: {str(e)}", status_code=302)
 
     finally:
         db.close()
@@ -366,13 +409,16 @@ def login(username: str = Form(...), password: str = Form(...)):
         user = db.query(User).filter(User.username == username).first()
 
         if not user:
-            return RedirectResponse(url="/?error=User not found", status_code=302)
+            # فشل - المستخدم غير موجود
+            return RedirectResponse(url="/?error=User not found ❌", status_code=302)
 
         if not pwd_context.verify(password, user.password):
-            return RedirectResponse(url="/?error=Wrong password", status_code=302)
+            # فشل - كلمة المرور خاطئة
+            return RedirectResponse(url="/?error=Wrong password ❌", status_code=302)
 
         sid = create_session(username)
-
+        
+        # نجاح - تم تسجيل الدخول
         return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
 
     finally:
@@ -384,7 +430,8 @@ def login(username: str = Form(...), password: str = Form(...)):
 @app.get("/logout")
 def logout(sid: str):
     delete_session(sid)
-    return RedirectResponse(url="/?error=Logged out successfully", status_code=302)
+    # نجاح - تم تسجيل الخروج
+    return RedirectResponse(url="/?success=Logged out successfully! 👋", status_code=302)
 
 # =========================
 # DASHBOARD (MODERN UI with Logout & Back buttons)
@@ -405,11 +452,23 @@ def dashboard(sid: str):
     cards = ""
 
     for f in files:
+        # الحصول على حجم الملف
+        file_path = os.path.join(user_dir, f)
+        size_bytes = os.path.getsize(file_path)
+        
+        # تحويل الحجم إلى KB أو MB
+        if size_bytes < 1024:
+            size_str = f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            size_str = f"{size_bytes / 1024:.1f} KB"
+        else:
+            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+            
         cards += f"""
         <div class="card" data-filename="{f}">
             <div class="file-icon">📄</div>
             <div class="file-name">{f}</div>
-            <div class="file-size">{os.path.getsize(os.path.join(user_dir, f))} bytes</div>
+            <div class="file-size">{size_str}</div>
             <div class="actions">
                 <a class="btn download" href="/download/{user}/{f}">⬇️ Download</a>
                 <a class="btn delete" href="/delete/{user}/{f}?sid={sid}">🗑️ Delete</a>
@@ -506,6 +565,7 @@ def dashboard(sid: str):
                 font-weight: 600;
                 transition: all 0.3s;
                 font-family: 'Inter', sans-serif;
+                display: inline-block;
             }}
             
             .back-btn {{
@@ -711,17 +771,6 @@ def dashboard(sid: str):
                 color: #9ca3af;
                 font-size: 18px;
                 grid-column: 1 / -1;
-            }}
-            
-            @keyframes slideIn {{
-                from {{
-                    opacity: 0;
-                    transform: translateX(-20px);
-                }}
-                to {{
-                    opacity: 1;
-                    transform: translateX(0);
-                }}
             }}
         </style>
         <script>
