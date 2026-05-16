@@ -1,5 +1,5 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 import os
 import shutil
 
@@ -9,149 +9,130 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # =========================
-# الصفحة الرئيسية (Layout جانبي)
+# قاعدة بيانات بسيطة (داخل الذاكرة)
+# =========================
+users = {}  # username -> password
+sessions = {}  # session_id -> username
+
+# =========================
+# توليد Session بسيط
+# =========================
+def create_session(username):
+    import random
+    sid = str(random.randint(100000, 999999))
+    sessions[sid] = username
+    return sid
+
+def get_user(session_id):
+    return sessions.get(session_id)
+
+# =========================
+# الصفحة الرئيسية (تسجيل دخول)
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    files = os.listdir(UPLOAD_DIR)
+    return """
+    <h2>🔐 Login</h2>
+    <form action="/login" method="post">
+        <input name="username" placeholder="Username" required>
+        <input name="password" type="password" placeholder="Password" required>
+        <button type="submit">Login</button>
+    </form>
 
-    file_items = ""
-    for f in files:
-        file_items += f"""
-        <div class="file">
-            📄 {f}
-            <a href="/download/{f}">⬇</a>
-            <a href="/delete/{f}">🗑</a>
-        </div>
-        """
+    <br>
 
-    return f"""
-    <html>
-    <head>
-        <title>File Manager</title>
-        <style>
-            body {{
-                margin: 0;
-                font-family: Arial;
-                display: flex;
-                height: 100vh;
-            }}
-
-            /* Sidebar left */
-            .left {{
-                width: 40%;
-                background: #1e293b;
-                color: white;
-                padding: 20px;
-                overflow-y: auto;
-            }}
-
-            /* Sidebar right */
-            .right {{
-                width: 60%;
-                background: #f1f5f9;
-                padding: 20px;
-            }}
-
-            h2 {{
-                margin-top: 0;
-            }}
-
-            .file {{
-                background: #334155;
-                padding: 10px;
-                margin: 10px 0;
-                border-radius: 8px;
-                display: flex;
-                justify-content: space-between;
-            }}
-
-            .file a {{
-                color: white;
-                margin-left: 10px;
-                text-decoration: none;
-            }}
-
-            .upload-box {{
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            }}
-
-            button {{
-                padding: 10px;
-                margin-top: 10px;
-                width: 100%;
-                border: none;
-                background: #2563eb;
-                color: white;
-                cursor: pointer;
-            }}
-
-            input {{
-                width: 100%;
-            }}
-        </style>
-    </head>
-
-    <body>
-
-        <!-- الملفات -->
-        <div class="left">
-            <h2>📁 Files</h2>
-            {file_items if file_items else "<p>No files yet</p>"}
-        </div>
-
-        <!-- رفع الملفات -->
-        <div class="right">
-            <h2>⬆ Upload File</h2>
-
-            <div class="upload-box">
-                <form action="/upload" method="post" enctype="multipart/form-data">
-                    <input type="file" name="file" required>
-                    <button type="submit">Upload</button>
-                </form>
-            </div>
-
-        </div>
-
-    </body>
-    </html>
+    <h3>🆕 Register</h3>
+    <form action="/register" method="post">
+        <input name="username" placeholder="Username" required>
+        <input name="password" type="password" placeholder="Password" required>
+        <button type="submit">Register</button>
+    </form>
     """
 
 # =========================
-# رفع ملف
+# تسجيل حساب جديد
+# =========================
+@app.post("/register")
+def register(username: str = Form(...), password: str = Form(...)):
+    if username in users:
+        return {"error": "User already exists"}
+
+    users[username] = password
+    return RedirectResponse(url="/", status_code=302)
+
+# =========================
+# تسجيل الدخول
+# =========================
+@app.post("/login")
+def login(username: str = Form(...), password: str = Form(...)):
+    if users.get(username) != password:
+        return {"error": "Wrong credentials"}
+
+    sid = create_session(username)
+    return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
+
+# =========================
+# لوحة المستخدم
+# =========================
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(sid: str):
+    user = get_user(sid)
+    if not user:
+        return "Unauthorized"
+
+    user_folder = os.path.join(UPLOAD_DIR, user)
+    os.makedirs(user_folder, exist_ok=True)
+
+    files = os.listdir(user_folder)
+
+    file_list = ""
+    for f in files:
+        file_list += f"""
+        <li>
+            📄 {f}
+            <a href="/download/{user}/{f}">⬇ Download</a>
+        </li>
+        """
+
+    return f"""
+    <h2>👤 Welcome {user}</h2>
+
+    <form action="/upload?sid={sid}" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <h3>📁 Your Files</h3>
+    <ul>{file_list if file_list else "<p>No files</p>"}</ul>
+    """
+
+# =========================
+# رفع ملف (خاص بالمستخدم)
 # =========================
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+def upload_file(sid: str, file: UploadFile = File(...)):
+    user = get_user(sid)
+    if not user:
+        return {"error": "Unauthorized"}
+
+    user_folder = os.path.join(UPLOAD_DIR, user)
+    os.makedirs(user_folder, exist_ok=True)
+
+    file_path = os.path.join(user_folder, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return {"message": "uploaded", "filename": file.filename}
+    return RedirectResponse(url=f"/dashboard?sid={sid}", status_code=302)
 
 # =========================
-# تحميل ملف
+# تحميل ملف (خاص بالمستخدم)
 # =========================
-@app.get("/download/{filename}")
-def download_file(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
+@app.get("/download/{user}/{filename}")
+def download(user: str, filename: str):
+    file_path = os.path.join(UPLOAD_DIR, user, filename)
 
     if os.path.exists(file_path):
         return FileResponse(file_path)
 
     return {"error": "not found"}
-
-# =========================
-# حذف ملف
-# =========================
-@app.get("/delete/{filename}")
-def delete_file(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
-
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    return {"message": "deleted"}
