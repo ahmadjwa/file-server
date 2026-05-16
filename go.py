@@ -36,19 +36,29 @@ Base = declarative_base()
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # =========================
-# USER MODEL
+# MODELS
 # =========================
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, index=True)
     password = Column(String)
+
+
+class File(Base):
+    __tablename__ = "files"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, index=True)
+    name = Column(String)
+    url = Column(String)
+    public_id = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
 # =========================
-# SESSIONS (temporary memory)
+# SESSIONS
 # =========================
 sessions = {}
 
@@ -64,23 +74,17 @@ def delete_session(sid):
     sessions.pop(sid, None)
 
 # =========================
-# CLOUD FILE STORAGE (in memory index)
-# =========================
-# sessions["files"] = { user: [ {name,url,public_id} ] }
-sessions["files"] = {}
-
-# =========================
-# HOME PAGE
+# HOME
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home(error: str = "", success: str = ""):
 
-    message_html = ""
+    msg = ""
 
     if error:
-        message_html = f"<div style='color:red'>{error}</div>"
+        msg = f"<p style='color:red'>{error}</p>"
     elif success:
-        message_html = f"<div style='color:lime'>{success}</div>"
+        msg = f"<p style='color:lime'>{success}</p>"
 
     return f"""
     <html>
@@ -88,12 +92,12 @@ def home(error: str = "", success: str = ""):
 
         <h1>🚀 Super Uploader</h1>
 
-        {message_html}
+        {msg}
 
         <form action="/login" method="post">
             <h3>Login</h3>
             <input name="username" placeholder="username"><br>
-            <input type="password" name="password" placeholder="password"><br>
+            <input type="password" name="password"><br>
             <button>Login</button>
         </form>
 
@@ -102,7 +106,7 @@ def home(error: str = "", success: str = ""):
         <form action="/register" method="post">
             <h3>Register</h3>
             <input name="username" placeholder="username"><br>
-            <input type="password" name="password" placeholder="password"><br>
+            <input type="password" name="password"><br>
             <button>Register</button>
         </form>
 
@@ -123,8 +127,10 @@ def register(username: str = Form(...), password: str = Form(...)):
         if existing:
             return RedirectResponse("/?error=User exists", status_code=302)
 
-        hashed = pwd_context.hash(password)
-        db.add(User(username=username, password=hashed))
+        db.add(User(
+            username=username,
+            password=pwd_context.hash(password)
+        ))
         db.commit()
 
         return RedirectResponse("/?success=Account created", status_code=302)
@@ -166,16 +172,20 @@ def dashboard(sid: str):
     if not user:
         return RedirectResponse("/")
 
-    files = sessions["files"].get(user, [])
+    db = SessionLocal()
+    try:
+        files = db.query(File).filter(File.username == user).all()
+    finally:
+        db.close()
 
     cards = ""
 
     for f in files:
         cards += f"""
         <div style="border:1px solid #444;padding:10px;margin:10px">
-            <p>📄 {f['name']}</p>
-            <a href="{f['url']}" target="_blank">Download</a>
-            <a href="/delete-cloud/{sid}/{f['public_id']}">Delete</a>
+            <p>📄 {f.name}</p>
+            <a href="{f.url}" target="_blank">Download</a>
+            <a href="/delete-cloud/{sid}/{f.public_id}">Delete</a>
         </div>
         """
 
@@ -202,7 +212,7 @@ def dashboard(sid: str):
     """
 
 # =========================
-# UPLOAD (CLOUDINARY)
+# UPLOAD (CLOUDINARY + DB)
 # =========================
 @app.post("/upload")
 def upload(sid: str, file: UploadFile = File(...)):
@@ -218,29 +228,34 @@ def upload(sid: str, file: UploadFile = File(...)):
         resource_type="auto"
     )
 
-    sessions["files"].setdefault(user, []).append({
-        "name": file.filename,
-        "url": result["secure_url"],
-        "public_id": result["public_id"]
-    })
+    db = SessionLocal()
+    try:
+        db.add(File(
+            username=user,
+            name=file.filename,
+            url=result["secure_url"],
+            public_id=result["public_id"]
+        ))
+        db.commit()
+    finally:
+        db.close()
 
     return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
 
 # =========================
-# DELETE (CLOUDINARY)
+# DELETE
 # =========================
 @app.get("/delete-cloud/{sid}/{public_id}")
 def delete_cloud(sid: str, public_id: str):
 
     cloudinary.uploader.destroy(public_id)
 
-    user = get_user(sid)
-
-    if user and user in sessions["files"]:
-        sessions["files"][user] = [
-            f for f in sessions["files"][user]
-            if f["public_id"] != public_id
-        ]
+    db = SessionLocal()
+    try:
+        db.query(File).filter(File.public_id == public_id).delete()
+        db.commit()
+    finally:
+        db.close()
 
     return RedirectResponse(f"/dashboard?sid={sid}")
 
