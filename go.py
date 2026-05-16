@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from passlib.context import CryptContext
 import os
 import random
-import traceback
+import hashlib
 
 import cloudinary
 import cloudinary.uploader
@@ -13,7 +13,7 @@ import cloudinary.uploader
 app = FastAPI()
 
 # =========================
-# CLOUDINARY CONFIG
+# CLOUDINARY
 # =========================
 cloudinary.config(
     cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
@@ -22,14 +22,13 @@ cloudinary.config(
 )
 
 # =========================
-# DATABASE SAFE SETUP
+# DATABASE
 # =========================
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise Exception("DATABASE_URL is missing in Render Environment Variables")
+    raise Exception("DATABASE_URL is missing")
 
-# Fix Render PostgreSQL format
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace(
         "postgres://",
@@ -37,24 +36,21 @@ if DATABASE_URL.startswith("postgres://"):
         1
     )
 
-connect_args = {}
-
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    connect_args=connect_args
-)
-
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 # =========================
-# PASSWORD HASH
+# PASSWORD SECURITY (FIXED)
 # =========================
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
+def normalize_password(password: str) -> str:
+    # يحول أي طول إلى قيمة ثابتة (حل مشكلة 72 bytes)
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 # =========================
 # MODELS
@@ -66,7 +62,6 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     password = Column(String)
 
-
 class File(Base):
     __tablename__ = "files"
 
@@ -76,7 +71,6 @@ class File(Base):
     url = Column(String)
     public_id = Column(String)
 
-# create tables
 Base.metadata.create_all(bind=engine)
 
 # =========================
@@ -109,7 +103,7 @@ def home(error: str = "", success: str = ""):
 
     return f"""
     <html>
-    <body style="font-family:Arial;background:#111;color:white;text-align:center;padding:50px">
+    <body style="background:#111;color:white;text-align:center;padding:40px">
 
         <h1>🚀 Super Uploader</h1>
         {msg}
@@ -117,7 +111,7 @@ def home(error: str = "", success: str = ""):
         <form action="/login" method="post">
             <h3>Login</h3>
             <input name="username" placeholder="username"><br>
-            <input type="password" name="password"><br>
+            <input type="password" name="password" placeholder="password"><br>
             <button>Login</button>
         </form>
 
@@ -126,7 +120,7 @@ def home(error: str = "", success: str = ""):
         <form action="/register" method="post">
             <h3>Register</h3>
             <input name="username" placeholder="username"><br>
-            <input type="password" name="password"><br>
+            <input type="password" name="password" placeholder="password"><br>
             <button>Register</button>
         </form>
 
@@ -135,37 +129,32 @@ def home(error: str = "", success: str = ""):
     """
 
 # =========================
-# REGISTER (SAFE)
+# REGISTER
 # =========================
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...)):
+
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.username == username).first()
-
-        if user:
+        if db.query(User).filter(User.username == username).first():
             return RedirectResponse("/?error=User exists", status_code=302)
 
-        db.add(User(
-            username=username,
-            password=pwd_context.hash(password)
-        ))
+        hashed = pwd_context.hash(normalize_password(password))
+
+        db.add(User(username=username, password=hashed))
         db.commit()
 
         return RedirectResponse("/?success=Account created", status_code=302)
-
-    except Exception as e:
-        print("REGISTER ERROR:", traceback.format_exc())
-        return {"error": str(e)}
 
     finally:
         db.close()
 
 # =========================
-# LOGIN (SAFE)
+# LOGIN
 # =========================
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
+
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.username == username).first()
@@ -173,16 +162,12 @@ def login(username: str = Form(...), password: str = Form(...)):
         if not user:
             return RedirectResponse("/?error=User not found", status_code=302)
 
-        if not pwd_context.verify(password, user.password):
+        if not pwd_context.verify(normalize_password(password), user.password):
             return RedirectResponse("/?error=Wrong password", status_code=302)
 
         sid = create_session(username)
 
         return RedirectResponse(f"/dashboard?sid={sid}", status_code=302)
-
-    except Exception as e:
-        print("LOGIN ERROR:", traceback.format_exc())
-        return {"error": str(e)}
 
     finally:
         db.close()
@@ -206,10 +191,9 @@ def dashboard(sid: str):
     cards = ""
     for f in files:
         cards += f"""
-        <div style="border:1px solid #444;padding:10px;margin:10px">
+        <div style="border:1px solid #444;margin:10px;padding:10px">
             <p>📄 {f.name}</p>
             <a href="{f.url}" target="_blank">Download</a>
-            <a href="/delete-cloud/{sid}/{f.public_id}">Delete</a>
         </div>
         """
 
@@ -225,7 +209,6 @@ def dashboard(sid: str):
         </form>
 
         <h3>Your Files</h3>
-
         {cards if cards else "No files yet"}
 
         <br><br>
