@@ -9,98 +9,113 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # =========================
-# الصفحة الرئيسية (واجهة احترافية)
+# الصفحة الرئيسية (Layout جانبي)
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def home():
     files = os.listdir(UPLOAD_DIR)
 
-    cards = ""
+    file_items = ""
     for f in files:
-        cards += f"""
-        <div class="card">
-            <div class="name">{f}</div>
-            <div class="actions">
-                <a href="/download/{f}"><button>⬇ Download</button></a>
-                <a href="/delete/{f}"><button class="delete">🗑 Delete</button></a>
-            </div>
+        file_items += f"""
+        <div class="file">
+            📄 {f}
+            <a href="/download/{f}">⬇</a>
+            <a href="/delete/{f}">🗑</a>
         </div>
         """
 
     return f"""
     <html>
     <head>
-        <title>Cloud File Manager</title>
+        <title>File Manager</title>
         <style>
             body {{
-                font-family: Arial;
-                background: #f1f5f9;
-                text-align: center;
                 margin: 0;
-                padding: 0;
+                font-family: Arial;
+                display: flex;
+                height: 100vh;
             }}
-            .container {{
-                width: 80%;
-                margin: auto;
+
+            /* Sidebar left */
+            .left {{
+                width: 40%;
+                background: #1e293b;
+                color: white;
+                padding: 20px;
+                overflow-y: auto;
+            }}
+
+            /* Sidebar right */
+            .right {{
+                width: 60%;
+                background: #f1f5f9;
                 padding: 20px;
             }}
-            h1 {{
-                color: #333;
+
+            h2 {{
+                margin-top: 0;
             }}
+
+            .file {{
+                background: #334155;
+                padding: 10px;
+                margin: 10px 0;
+                border-radius: 8px;
+                display: flex;
+                justify-content: space-between;
+            }}
+
+            .file a {{
+                color: white;
+                margin-left: 10px;
+                text-decoration: none;
+            }}
+
             .upload-box {{
                 background: white;
                 padding: 20px;
                 border-radius: 10px;
-                margin-bottom: 20px;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
             }}
-            input {{
-                padding: 10px;
-            }}
+
             button {{
-                padding: 10px 15px;
-                margin: 5px;
+                padding: 10px;
+                margin-top: 10px;
+                width: 100%;
                 border: none;
-                cursor: pointer;
-                border-radius: 5px;
-            }}
-            .card {{
-                background: white;
-                padding: 15px;
-                margin: 10px;
-                border-radius: 10px;
-                display: inline-block;
-                width: 250px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            }}
-            .name {{
-                font-weight: bold;
-                margin-bottom: 10px;
-            }}
-            .delete {{
-                background: red;
+                background: #2563eb;
                 color: white;
+                cursor: pointer;
+            }}
+
+            input {{
+                width: 100%;
             }}
         </style>
     </head>
 
     <body>
-        <div class="container">
 
-            <h1>☁ Cloud File Manager</h1>
+        <!-- الملفات -->
+        <div class="left">
+            <h2>📁 Files</h2>
+            {file_items if file_items else "<p>No files yet</p>"}
+        </div>
+
+        <!-- رفع الملفات -->
+        <div class="right">
+            <h2>⬆ Upload File</h2>
 
             <div class="upload-box">
                 <form action="/upload" method="post" enctype="multipart/form-data">
                     <input type="file" name="file" required>
-                    <button type="submit">⬆ Upload</button>
+                    <button type="submit">Upload</button>
                 </form>
             </div>
 
-            <h2>📁 Your Files</h2>
-            <div>
-                {cards if cards else "<p>No files yet</p>"}
-            </div>
-
         </div>
+
     </body>
     </html>
     """
